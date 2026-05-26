@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>OmniCare - Chat Room</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        #chat-container { width: 100%; max-width: 600px; background: white; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #ddd; overflow: hidden; }
+        
+        #chat-log { height: 450px; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; background: #f9f9f9; }
+        
+        .message-wrapper { display: flex; flex-direction: column; max-width: 80%; position: relative; }
+        .message-wrapper.doctor { align-self: flex-end; }
+        .message-wrapper.patient { align-self: flex-start; }
+
+        .message-content { padding: 10px 15px; border-radius: 15px; font-size: 0.95rem; line-height: 1.4; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        
+        /* جعل خلفية الطبيب فاتحة قليلاً ليظهر الأسود بوضوح */
+        .doctor .message-content { background-color: #d1e7ff; color: #003366; border-bottom-right-radius: 2px; }
+        .patient .message-content { background-color: #e9ecef; color: #333; border-bottom-left-radius: 2px; }
+
+        /* تعديل الوقت للأسود الصريح */
+        .timestamp { 
+            font-size: 0.75em !important; 
+            margin-top: 4px !important; 
+            color: #000000 !important; /* أسود صريح */
+            align-self: flex-end !important; 
+            font-weight: 600 !important;
+            opacity: 1 !important;
+        }
+        /* إزالة أي تداخل لوني قديم */
+        .doctor .timestamp { color: #000000 !important; margin-right: 5px; }
+
+        #input-area { padding: 15px; display: flex; gap: 10px; background: #fff; border-top: 1px solid #eee; }
+        #chat-message-input { flex-grow: 1; padding: 12px; border: 1px solid #ddd; border-radius: 25px; outline: none; }
+        #chat-message-submit { padding: 10px 25px; background: #28a745; color: white; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; }
+        
+        h2 { color: #333; margin-bottom: 15px; }
+        .status-dot { height: 12px; width: 12px; background-color: #bbb; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .online { background-color: #28a745; box-shadow: 0 0 8px #28a745; }
+    </style>
+</head>
+<body>
+    <h2>
+        <span class="status-dot" id="status-dot"></span>
+        Chat Room: {{ room_id }}
+    </h2>
+    
+    <div id="chat-container">
+        <div id="chat-log">
+            {% for msg in chat_messages %}
+            <div class="message-wrapper {% if msg.sender_type == 'doctor' %}doctor{% else %}patient{% endif %}">
+                <div class="message-content">
+                    {{ msg.message }}
+                </div>
+                <div class="timestamp">{{ msg.timestamp|date:"H:i" }}</div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div id="input-area">
+            <input id="chat-message-input" type="text" placeholder="Write a message...">
+            <button id="chat-message-submit">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const roomId = "{{ room_id }}";
+        const chatLog = document.querySelector('#chat-log');
+        
+        const scrollToBottom = () => { chatLog.scrollTop = chatLog.scrollHeight; };
+        scrollToBottom();
+
+        const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+        const chatSocket = new WebSocket(
+            wsScheme + '://' + window.location.host + '/ws/chat/' + roomId + '/'
+        );
+
+        chatSocket.onopen = function() {
+            document.getElementById('status-dot').classList.add('online');
+        };
+
+        chatSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            const isDoctor = data.sender_type === 'doctor';
+            
+            const msgHtml = `
+                <div class="message-wrapper ${isDoctor ? 'doctor' : 'patient'}">
+                    <div class="message-content">
+                        ${data.message}
+                    </div>
+                    <div class="timestamp">${data.timestamp}</div>
+                </div>
+            `;
+            
+            chatLog.innerHTML += msgHtml;
+            scrollToBottom();
+        };
+
+        chatSocket.onclose = function(e) {
+            document.getElementById('status-dot').classList.remove('online');
+            console.error('Chat socket closed unexpectedly');
+        };
+
+        document.querySelector('#chat-message-input').focus();
+        document.querySelector('#chat-message-input').onkeyup = function(e) {
+            if (e.keyCode === 13) { document.querySelector('#chat-message-submit').click(); }
+        };
+
+        document.querySelector('#chat-message-submit').onclick = function(e) {
+            const messageInputDom = document.querySelector('#chat-message-input');
+            const message = messageInputDom.value;
+            if (message.trim() !== "") {
+                chatSocket.send(JSON.stringify({
+                    'message': message,
+                    'sender_type': 'doctor' 
+                }));
+                messageInputDom.value = '';
+            }
+        };
+    </script>
+</body>
+</html>
